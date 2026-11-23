@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Time Blocks</title>
+<meta name="theme-color" content="#101318">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root{
+  --bg:#f5f6f8; --panel:#ffffff; --text:#1b1f27; --muted:#6b7280; --line:#e3e6eb;
+  --now:#e5484d; --free:#9aa3af; --ring-track:#e8ebef;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101318; --panel:#171b22; --text:#e8ebf0; --muted:#8b93a1; --line:#262c36;
+    --now:#ff6369; --free:#5b6372; --ring-track:#232933;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101318; --panel:#171b22; --text:#e8ebf0; --muted:#8b93a1; --line:#262c36;
+  --now:#ff6369; --free:#5b6372; --ring-track:#232933;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+.app{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:16px;height:100dvh;padding:16px;max-width:1100px;margin:0 auto}
+@media (max-width:720px){.app{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);gap:12px;padding:12px 16px}}
+
+/* ---- timer side ---- */
+.timer{background:var(--panel);border-radius:20px;padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;position:relative;min-height:0}
+@media (max-width:720px){.timer{padding:14px;gap:8px}}
+.top{position:absolute;top:12px;left:16px;right:12px;display:flex;justify-content:space-between;align-items:center;color:var(--muted);font-size:14px}
+.iconbtn{background:none;border:0;padding:8px;border-radius:10px;cursor:pointer;color:var(--muted);line-height:0}
+.iconbtn:hover{background:var(--line)}
+.ringwrap{position:relative;width:min(70vw,320px);aspect-ratio:1;margin-top:18px}
+@media (max-width:720px){.ringwrap{width:min(52vw,210px)}}
+.ringwrap svg{width:100%;height:100%;transform:rotate(-90deg)}
+.ringwrap circle{fill:none;stroke-width:14}
+.track{stroke:var(--ring-track)}
+.prog{stroke-linecap:round;transition:stroke-dashoffset .9s linear,stroke .4s}
+.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:16%}
+.remain{font-size:clamp(36px,9vw,64px);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.remlabel{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.curtitle{font-size:clamp(20px,4.4vw,28px);font-weight:650;text-align:center;max-width:100%;overflow-wrap:anywhere}
+.curmeta{color:var(--muted);font-size:15px}
+.next{margin-top:4px;padding:10px 16px;border-radius:14px;background:var(--bg);font-size:15px;text-align:center;max-width:100%}
+.next b{font-weight:650}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:baseline}
+.status{font-size:12px;color:var(--muted);min-height:1em;text-align:center}
+.status.err{color:var(--now)}
+
+/* ---- timeline side ---- */
+.day{background:var(--panel);border-radius:20px;display:flex;flex-direction:column;min-height:0}
+.dayhead{padding:14px 16px 8px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.dayhead h1{font-size:18px;margin:0}
+.dayhead .sum{color:var(--muted);font-size:13px}
+.allday{display:flex;gap:6px;flex-wrap:wrap;padding:0 16px 8px}
+.allday span{font-size:13px;padding:3px 10px;border-radius:999px;color:#fff}
+.scroll{overflow-y:auto;flex:1;min-height:0;padding:6px 12px 24px 0;scroll-behavior:smooth}
+.grid{position:relative;margin-left:56px}
+.hour{position:absolute;left:0;right:0;border-top:1px solid var(--line)}
+.hour span{position:absolute;left:-52px;top:-9px;width:44px;text-align:right;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.blk{position:absolute;border-radius:10px;padding:6px 10px;overflow:hidden;color:#fff;font-size:14px;line-height:1.25;border-left:4px solid rgba(0,0,0,.18)}
+.blk .t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.blk .h{opacity:.85;font-size:12px;font-variant-numeric:tabular-nums}
+.blk.past{opacity:.38}
+.blk.cur{box-shadow:0 0 0 3px var(--text)}
+.blk.free{background:transparent!important;border:1.5px dashed var(--free);color:var(--muted)}
+.blk.free .t{font-weight:500}
+.blk.tiny{padding:1px 8px}.blk.tiny .h{display:none}
+.nowline{position:absolute;left:-8px;right:0;height:0;border-top:2px solid var(--now);z-index:5;pointer-events:none}
+.nowline::before{content:"";position:absolute;left:-5px;top:-7px;width:12px;height:12px;border-radius:50%;background:var(--now)}
+
+/* ---- settings ---- */
+dialog{border:0;border-radius:18px;background:var(--panel);color:var(--text);width:min(560px,calc(100vw - 32px));padding:20px}
+dialog::backdrop{background:rgba(0,0,0,.5)}
+dialog h2{margin:0 0 12px;font-size:20px}
+label{display:block;font-size:14px;font-weight:600;margin:14px 0 4px}
+.hint{font-size:13px;color:var(--muted);font-weight:400}
+textarea,input[type=text],input[type=number]{width:100%;font:inherit;font-size:14px;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text)}
+textarea{min-height:80px;resize:vertical}
+.row{display:flex;align-items:center;gap:8px;margin-top:12px;font-size:15px}
+.row input[type=number]{width:70px}
+.actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+.btn{border:0;border-radius:10px;padding:10px 16px;cursor:pointer;background:var(--line)}
+.btn.primary{background:#3b82f6;color:#fff}
+</style>
+</head>
+<body>
+<div class="app">
+  <section class="timer" aria-live="polite">
+    <div class="top">
+      <span id="clock">--:--</span>
+      <span>
+        <button class="iconbtn" id="refreshBtn" title="Refresh calendar" aria-label="Refresh calendar">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5"/></svg>
+        </button>
+        <button class="iconbtn" id="settingsBtn" title="Settings" aria-label="Settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+      </span>
+    </div>
+    <div class="ringwrap">
+      <svg viewBox="0 0 120 120"><circle class="track" cx="60" cy="60" r="52"/><circle class="prog" id="prog" cx="60" cy="60" r="52"/></svg>
+      <div class="center"><div class="remain" id="remain">--:--</div><div class="remlabel" id="remlabel">left</div></div>
+    </div>
+    <div class="curtitle" id="curtitle">Loading…</div>
+    <div class="curmeta" id="curmeta"></div>
+    <div class="next" id="next"></div>
+    <div class="status" id="status"></div>
+  </section>
+
+  <section class="day">
+    <div class="dayhead"><h1 id="dayTitle">Today</h1><span class="sum" id="sum"></span></div>
+    <div class="allday" id="allday"></div>
+    <div class="scroll" id="scroll"><div class="grid" id="grid"></div></div>
+  </section>
+</div>
+
+<dialog id="settings">
+  <form method="dialog" id="settingsForm">
+    <h2>Settings</h2>
+    <label for="icsUrls">Calendar links (ICS) <span class="hint">· one per line. Google: Calendar settings → your calendar → "Secret address in iCal format"</span></label>
+    <textarea id="icsUrls" placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"></textarea>
+    <label for="proxy">Proxy URL <span class="hint">· your Cloudflare Worker, needed because Google blocks direct browser reads</span></label>
+    <input type="text" id="proxy" placeholder="https://timeblock-proxy.yourname.workers.dev">
+    <div class="row"><input type="checkbox" id="warn"><label for="warn" style="margin:0;font-weight:400">Buzz + notify</label><input type="number" id="warnMin" min="1" max="30"> <span>min before a block ends</span></div>
+    <div class="row"><input type="checkbox" id="wake"><label for="wake" style="margin:0;font-weight:400">Keep screen on while open</label></div>
+    <p class="hint">Settings stay on this device only. Leave the links empty to see sample data.</p>
+    <div class="actions">
+      <button class="btn" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn primary" value="save" id="saveBtn">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="ical.min.js"></script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const PX_PER_MIN = 1.5;
+const PALETTE = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#ec4899','#84cc16','#f97316','#6366f1'];
+const KEY = 'tb.settings', CACHE = 'tb.cache';
+
+/* ---------- storage (safe) ---------- */
+const store = {
+  get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+let settings = Object.assign({icsUrls:[], proxy:'', warn:true, warnMin:5, wake:false}, store.get(KEY, {}));
+
+// One-tap setup link: index.html#ics=<url>&proxy=<url>
+if (location.hash.length > 1) {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (p.getAll('ics').length) settings.icsUrls = p.getAll('ics');
+  if (p.get('proxy')) settings.proxy = p.get('proxy');
+  store.set(KEY, settings);
+  history.replaceState(null, '', location.pathname + location.search);
+}
+
+/* ---------- helpers ---------- */
+const pad = n => String(n).padStart(2, '0');
+const hm = d => pad(d.getHours()) + ':' + pad(d.getMinutes());
+const dayStart = d => { const x = new Date(d); x.setHours(0,0,0,0); return x; };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const minsOfDay = d => d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+function colorFor(title){ let h = 0; for (const c of title.toLowerCase()) h = (h * 31 + c.charCodeAt(0)) >>> 0; return PALETTE[h % PALETTE.length]; }
+function fmtLeft(ms){
+  const s = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return h ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+}
+function fmtDur(ms){ const m = Math.round(ms / 60000); return m < 60 ? `${m} min` : `${Math.floor(m/60)} h${m%60 ? ' ' + (m%60) + ' min' : ''}`; }
+function setStatus(msg, err){ const s = $('status'); s.textContent = msg || ''; s.classList.toggle('err', !!err); }
+
+/* ---------- ICS → today's events ---------- */
+function parseIcs(text, from, to){
+  const out = [];
+  const comp = new ICAL.Component(ICAL.parse(text));
+  comp.getAllSubcomponents('vtimezone').forEach(tz => { try { ICAL.TimezoneService.register(new ICAL.Timezone(tz)); } catch {} });
+  const vevents = comp.getAllSubcomponents('vevent');
+  const exByUid = {};
+  vevents.filter(v => v.hasProperty('recurrence-id')).forEach(v => (exByUid[v.getFirstPropertyValue('uid')] ||= []).push(v));
+  const push = (ev, s, e) => {
+    if (!(e > from && s < to)) return;
+    const status = (ev.component.getFirstPropertyValue('status') || '').toUpperCase();
+    if (status === 'CANCELLED') return;
+    out.push({ id: ev.uid + '@' + s.getTime(), title: ev.summary || '(no title)', start: s, end: e, allDay: ev.startDate.isDate });
+  };
+  for (const v of vevents) {
+    if (v.hasProperty('recurrence-id')) continue;
+    const ev = new ICAL.Event(v);
+    (exByUid[ev.uid] || []).forEach(x => { try { ev.relateException(new ICAL.Event(x)); } catch {} });
+    if (ev.isRecurring()) {
+      const it = ev.iterator(); let t, guard = 0;
+      while ((t = it.next()) && guard++ < 50000) {
+        if (t.toJSDate() >= to) break;
+        const d = ev.getOccurrenceDetails(t);
+        push(d.item, d.startDate.toJSDate(), d.endDate.toJSDate());
+      }
+    } else if (ev.startDate) {
+      const end = ev.endDate ? ev.endDate.toJSDate() : new Date(ev.startDate.toJSDate().getTime() + 30*60000);
+      push(ev, ev.startDate.toJSDate(), end);
+    }
+  }
+  return out;
+}
+
+async function fetchIcs(url){
+  const target = settings.proxy ? settings.proxy.replace(/\/$/, '') + '/?url=' + encodeURIComponent(url) : url;
+  const r = await fetch(target, { cache: 'no-store' });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const t = await r.text();
+  if (!t.includes('BEGIN:VCALENDAR')) throw new Error('not a calendar file');
+  return t;
+}
+
+/* ---------- sample data ---------- */
+function demoEvents(){
+  const now = new Date(), base = new Date(now); base.setMinutes(Math.floor(now.getMinutes()/15)*15 - 30, 0, 0);
+  const plan = [[-210,-150,'Morning routine'],[-150,-90,'Email & admin'],[-75,-30,'Gym'],[-30,30,'Deep work: project'],[30,45,'Break'],
+                [45,105,'Team meeting'],[120,150,'Lunch'],[150,240,'Deep work: project'],[255,285,'Errands'],[300,360,'Read / learn']];
+  const ev = plan.map(([a,b,t], i) => ({ id:'demo'+i, title:t, start:new Date(base.getTime()+a*60000), end:new Date(base.getTime()+b*60000), allDay:false }));
+  ev.push({ id:'demoAD', title:'Sample data: add your calendar in Settings', start:dayStart(now), end:addDays(dayStart(now),1), allDay:true });
+  return ev;
+}
+
+/* ---------- state ---------- */
+let events = [], allDay = [], blocks = [], today = dayStart(new Date());
+const warned = new Set(store.get('tb.warned', []));
+
+async function load(){
+  today = dayStart(new Date());
+  const from = today, to = addDays(today, 1);
+  let all = [];
+  if (!settings.icsUrls.length) {
+    all = demoEvents(); setStatus('Showing sample data');
+  } else {
+    setStatus('Updating…');
+    const cache = store.get(CACHE, {}), errors = [];
+    await Promise.all(settings.icsUrls.map(async url => {
+      let text;
+      try { text = await fetchIcs(url); cache[url] = text; }
+      catch (e) { errors.push(e.message); text = cache[url]; }
+      if (text) { try { all.push(...parseIcs(text, from, to)); } catch (e) { errors.push('could not read calendar'); } }
+    }));
+    store.set(CACHE, cache);
+    setStatus(errors.length ? `Couldn't refresh (${errors[0]}). Showing last saved copy.` : 'Updated ' + hm(new Date()), errors.length > 0);
+  }
+  allDay = all.filter(e => e.allDay);
+  events = all.filter(e => !e.allDay).map(e => ({...e, start: e.start < from ? from : e.start, end: e.end > to ? to : e.end}))
+              .sort((a, b) => a.start - b.start || a.end - b.end);
+  buildBlocks(); render(); tick(true);
+}
+
+// events + free gaps (≥ 10 min) between first and last event
+function buildBlocks(){
+  blocks = events.map(e => ({...e, color: colorFor(e.title)}));
+  let cursor = null;
+  for (const e of events) {
+    if (cursor && e.start - cursor >= 10*60000) blocks.push({ id:'free'+cursor.getTime(), title:'Free time', start:new Date(cursor), end:e.start, free:true });
+    if (!cursor || e.end > cursor) cursor = e.end;
+  }
+  // lanes for overlaps
+  const real = blocks.filter(b => !b.free).sort((a,b) => a.start - b.start);
+  let cluster = [], clusterEnd = 0;
+  const flush = () => { const lanes = []; for (const b of cluster) { let i = lanes.findIndex(end => end <= b.start); if (i < 0) { i = lanes.length; lanes.push(0); } lanes[i] = b.end; b.lane = i; } cluster.forEach(b => b.lanes = lanes.length); cluster = []; };
+  for (const b of real) { if (cluster.length && b.start >= clusterEnd) flush(); cluster.push(b); clusterEnd = Math.max(clusterEnd, b.end); }
+  flush();
+}
+
+/* ---------- render timeline ---------- */
+let rangeStart = 7*60, rangeEnd = 22*60;
+function render(){
+  $('dayTitle').textContent = today.toLocaleDateString(undefined, { weekday:'long', day:'numeric', month:'long' });
+  const busy = events.reduce((s, e) => s + (e.end - e.start), 0);
+  $('sum').textContent = events.length ? `${events.length} blocks · ${fmtDur(busy)} planned` : 'Nothing planned';
+  $('allday').innerHTML = '';
+  allDay.forEach(e => { const s = document.createElement('span'); s.textContent = e.title; s.style.background = colorFor(e.title); $('allday').append(s); });
+
+  const now = minsOfDay(new Date());
+  rangeStart = Math.floor(Math.min(7*60, now - 30, ...events.map(e => minsOfDay(e.start))) / 60) * 60;
+  rangeEnd = Math.ceil(Math.max(22*60, now + 60, ...events.map(e => e.end - today >= 864e5 ? 1440 : minsOfDay(e.end))) / 60) * 60;
+  rangeStart = Math.max(0, rangeStart); rangeEnd = Math.min(1440, rangeEnd);
+  const g = $('grid'); g.innerHTML = ''; g.style.height = (rangeEnd - rangeStart) * PX_PER_MIN + 'px';
+  for (let m = rangeStart; m <= rangeEnd; m += 60) {
+    const h = document.createElement('div'); h.className = 'hour'; h.style.top = (m - rangeStart) * PX_PER_MIN + 'px';
+    h.innerHTML = `<span>${pad(m/60 % 24)}:00</span>`; g.append(h);
+  }
+  for (const b of blocks) {
+    const s = minsOfDay(b.start), e = b.end - today >= 864e5 ? 1440 : minsOfDay(b.end);
+    const el = document.createElement('div');
+    el.className = 'blk' + (b.free ? ' free' : '');
+    el.dataset.id = b.id;
+    const top = (s - rangeStart) * PX_PER_MIN, hgt = Math.max(18, (e - s) * PX_PER_MIN - 2);
+    if (hgt < 34) el.classList.add('tiny');
+    const lanes = b.lanes || 1, lane = b.lane || 0;
+    Object.assign(el.style, { top: top + 'px', height: hgt + 'px', left: `calc(${lane / lanes * 100}% + 4px)`, width: `calc(${100 / lanes}% - 8px)` });
+    if (!b.free) el.style.background = b.color;
+    el.innerHTML = `<div class="t"></div><div class="h">${hm(b.start)}–${hm(b.end)} · ${fmtDur(b.end - b.start)}</div>`;
+    el.querySelector('.t').textContent = b.title;
+    g.append(el);
+  }
+  const nl = document.createElement('div'); nl.className = 'nowline'; nl.id = 'nowline'; g.append(nl);
+  scrolled = false;
+}
+
+/* ---------- live tick ---------- */
+const C = 2 * Math.PI * 52; $('prog').style.strokeDasharray = C;
+let scrolled = false, lastDay = today.getTime();
+function tick(force){
+  const now = new Date();
+  if (dayStart(now).getTime() !== lastDay) { lastDay = dayStart(now).getTime(); load(); return; }
+  $('clock').textContent = hm(now);
+  const nl = $('nowline');
+  if (nl) nl.style.top = (minsOfDay(now) - rangeStart) * PX_PER_MIN + 'px';
+  if (!scrolled && nl) { const sc = $('scroll'); sc.scrollTop = Math.max(0, nl.offsetTop - sc.clientHeight * 0.3); scrolled = true; }
+
+  // current = real block happening now that ends soonest; else free gap
+  const cur = events.filter(e => e.start <= now && e.end > now).sort((a,b) => a.end - b.end)[0];
+  const nxt = events.find(e => e.start > now);
+  document.querySelectorAll('.blk').forEach(el => {
+    const b = blocks.find(x => x.id === el.dataset.id); if (!b) return;
+    el.classList.toggle('past', b.end <= now);
+    el.classList.toggle('cur', !!cur && b.id === cur.id);
+  });
+
+  const prog = $('prog');
+  if (cur) {
+    const total = cur.end - cur.start, left = cur.end - now;
+    $('remain').textContent = fmtLeft(left);
+    $('remlabel').textContent = 'left';
+    $('curtitle').textContent = cur.title;
+    $('curmeta').textContent = `${hm(cur.start)} – ${hm(cur.end)} · ends at ${hm(cur.end)}`;
+    prog.style.stroke = colorFor(cur.title);
+    prog.style.strokeDashoffset = C * (1 - left / total);
+    maybeWarn(cur, left);
+  } else if (nxt) {
+    const prevEnd = events.filter(e => e.end <= now).reduce((m, e) => e.end > m ? e.end : m, today);
+    const total = nxt.start - prevEnd, left = nxt.start - now;
+    $('remain').textContent = fmtLeft(left);
+    $('remlabel').textContent = 'until next';
+    $('curtitle').textContent = 'Free time';
+    $('curmeta').textContent = `until ${hm(nxt.start)}`;
+    prog.style.stroke = 'var(--free)';
+    prog.style.strokeDashoffset = C * (1 - Math.min(1, left / total));
+  } else {
+    $('remain').textContent = '✓';
+    $('remlabel').textContent = '';
+    $('curtitle').textContent = events.length ? 'Done for today' : 'Nothing planned';
+    $('curmeta').textContent = '';
+    prog.style.strokeDashoffset = 0; prog.style.stroke = 'var(--free)';
+  }
+  if (nxt) {
+    $('next').innerHTML = `Next: <span class="dot" style="background:${colorFor(nxt.title)}"></span><b></b> at ${hm(nxt.start)} <span style="color:var(--muted)">· ${fmtDur(nxt.end - nxt.start)}</span>`;
+    $('next').querySelector('b').textContent = nxt.title;
+  } else $('next').textContent = 'No more blocks today';
+}
+
+/* ---------- gentle warning ---------- */
+function maybeWarn(cur, left){
+  if (!settings.warn || warned.has(cur.id)) return;
+  const lim = settings.warnMin * 60000;
+  if (left > lim || cur.end - cur.start <= lim) return;
+  warned.add(cur.id); store.set('tb.warned', [...warned].slice(-200));
+  try { navigator.vibrate && navigator.vibrate([200, 120, 200]); } catch {}
+  const body = `${cur.title} ends at ${hm(cur.end)}`;
+  if ('Notification' in window && Notification.permission === 'granted') {
+    const t = `${settings.warnMin} min left`;
+    navigator.serviceWorker?.ready.then(r => r.showNotification(t, { body, icon:'icon.svg', tag:'tb' })).catch(() => { try { new Notification(t, { body }); } catch {} });
+  }
+}
+
+/* ---------- wake lock ---------- */
+let lock = null;
+async function applyWake(){
+  try {
+    if (settings.wake && 'wakeLock' in navigator && document.visibilityState === 'visible') lock = await navigator.wakeLock.request('screen');
+    else if (!settings.wake && lock) { await lock.release(); lock = null; }
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') { applyWake(); tick(); } });
+
+/* ---------- settings UI ---------- */
+$('settingsBtn').onclick = () => {
+  $('icsUrls').value = settings.icsUrls.join('\n'); $('proxy').value = settings.proxy;
+  $('warn').checked = settings.warn; $('warnMin').value = settings.warnMin; $('wake').checked = settings.wake;
+  $('settings').showModal();
+};
+$('settings').addEventListener('close', () => {
+  if ($('settings').returnValue !== 'save') return;
+  settings.icsUrls = $('icsUrls').value.split(/\s+/).map(s => s.trim().replace(/^webcal:/i, 'https:')).filter(Boolean);
+  settings.proxy = $('proxy').value.trim();
+  settings.warn = $('warn').checked; settings.warnMin = Math.min(30, Math.max(1, +$('warnMin').value || 5));
+  settings.wake = $('wake').checked;
+  store.set(KEY, settings);
+  if (settings.warn && 'Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+  applyWake(); load();
+});
+$('refreshBtn').onclick = () => load();
+
+/* ---------- go ---------- */
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+load(); applyWake();
+setInterval(tick, 1000);
+setInterval(load, 5 * 60000);
+})();
+</script>
+</body>
+</html>
