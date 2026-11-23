@@ -391,8 +391,9 @@ $('settingsBtn').onclick = () => {
 };
 $('settings').addEventListener('close', () => {
   if ($('settings').returnValue !== 'save') return;
-  settings.icsUrls = $('icsUrls').value.split(/\s+/).map(s => s.trim().replace(/^webcal:/i, 'https:')).filter(Boolean);
-  settings.proxy = $('proxy').value.trim();
+  const fixUrl = u => { u = u.trim().replace(/^webcal:\/\//i, 'https://'); return u && !/^https?:\/\//i.test(u) ? 'https://' + u : u; };
+  settings.icsUrls = $('icsUrls').value.split(/\s+/).map(fixUrl).filter(Boolean);
+  settings.proxy = fixUrl($('proxy').value);
   settings.warn = $('warn').checked; settings.warnMin = Math.min(30, Math.max(1, +$('warnMin').value || 5));
   settings.wake = $('wake').checked;
   store.set(KEY, settings);
